@@ -1,16 +1,7 @@
 import { useMDXComponents as getNextraComponents } from 'nextra/mdx-components'
-import { TOC } from './src/components/toc'
 
-const defaultComponents = getNextraComponents({
-  wrapper({ children, toc }) {
-    return (
-      <>
-        <div style={{ flexGrow: 1, padding: 20 }}>{children}</div>
-        <TOC toc={toc} />
-      </>
-    )
-  }
-})
+
+const defaultComponents = getNextraComponents({})
 
 export const useMDXComponents = components => ({
   ...defaultComponents,

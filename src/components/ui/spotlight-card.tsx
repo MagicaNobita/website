@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, MouseEvent } from "react";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
 import { cn } from "@/lib/utils";
 
 export const SpotlightCard = ({
@@ -13,31 +14,57 @@ export const SpotlightCard = ({
     spotlightColor?: string;
 }) => {
     const divRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const spotlightRef = useRef<HTMLDivElement>(null);
 
-    const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-        if (!divRef.current) return;
+    useEffect(() => {
+        const div = divRef.current;
+        const spotlight = spotlightRef.current;
+        if (!div || !spotlight) return;
 
-        const rect = divRef.current.getBoundingClientRect();
-        setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    };
+        // Use quickTo for high performance mouse tracking
+        const xTo = gsap.quickTo(spotlight, "x", { duration: 0.4, ease: "power3" });
+        const yTo = gsap.quickTo(spotlight, "y", { duration: 0.4, ease: "power3" });
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const rect = div.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            xTo(x);
+            yTo(y);
+
+            // Also subtly fade in/out based on proximity/enter/leave could be handled by CSS group-hover
+            // But keeping opacity managed by CSS is fine for performance.
+        };
+
+        div.addEventListener("mousemove", handleMouseMove);
+
+        return () => {
+            div.removeEventListener("mousemove", handleMouseMove);
+        };
+    }, []);
 
     return (
         <div
             ref={divRef}
-            onMouseMove={handleMouseMove}
             className={cn(
-                "relative rounded-3xl border border-border/50 bg-card/40 overflow-hidden transition-colors duration-300 group",
+                "relative rounded-3xl border border-border/50 bg-card/40 overflow-hidden group isolate",
                 className
             )}
         >
             <div
-                className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
+                ref={spotlightRef}
+                className="pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-500 group-hover:opacity-100 mix-blend-screen"
                 style={{
-                    background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${spotlightColor}, transparent 40%)`,
+                    width: "600px",
+                    height: "600px",
+                    left: "-300px", // Center the spotlight
+                    top: "-300px",
+                    background: `radial-gradient(circle closest-side, ${spotlightColor}, transparent)`,
+                    transform: "translate(0,0)" // Initial transform
                 }}
             />
-            <div className="relative h-full">{children}</div>
+            <div className="relative h-full z-10">{children}</div>
         </div>
     );
 };

@@ -98,10 +98,10 @@ export const StripeCodeBlock = () => {
 
 
     return (
-        <div className="w-full max-w-4xl mx-auto font-mono text-sm shadow-2xl rounded-xl overflow-hidden bg-[#0d1117] border border-white/10 flex flex-col md:flex-row h-[500px]">
+        <div className="w-full max-w-4xl mx-auto font-mono text-sm shadow-2xl rounded-xl overflow-hidden bg-[#0d1117] border border-white/10 flex flex-col h-[600px] md:h-[700px]">
 
-            {/* LEFT PANE: CODE EDITOR */}
-            <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r border-white/5 relative bg-[#0d1117]">
+            {/* TOP PANE: CODE EDITOR (60%) */}
+            <div className="flex-[1.5] flex flex-col border-b border-white/5 relative bg-[#0d1117]">
                 {/* Tab Bar */}
                 <div className="flex items-center px-4 py-2 border-b border-white/5 bg-white/5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
@@ -160,8 +160,8 @@ export const StripeCodeBlock = () => {
                 </div>
             </div>
 
-            {/* RIGHT PANE: TERMINAL */}
-            <div className="flex-1 bg-black/40 flex flex-col">
+            {/* BOTTOM PANE: TERMINAL (40%) */}
+            <div className="flex-1 bg-black/40 flex flex-col min-h-0">
                 <div className="flex items-center px-4 py-2 border-b border-white/5 bg-white/5 text-xs text-muted-foreground gap-2">
                     <TerminalIcon size={12} />
                     <span>Terminal</span>
