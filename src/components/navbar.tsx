@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import type { FC } from 'react'
 import { Menu, X } from 'lucide-react'
 import Link from 'next/link'
+import NextImage from 'next/image'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -61,7 +62,7 @@ export const Navbar: FC = () => {
         {/* Logo */}
         <div className="flex items-center gap-2">
           <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm shadow-lg shadow-primary/20">B</div>
+            <NextImage src="/icon.svg" alt="Bamboo Logo" width={32} height={32} className="w-8 h-8 rounded-full" />
             <span className={cn("transition-opacity duration-300", scrolled ? "hidden md:block" : "block")}>Bamboo</span>
           </Link>
         </div>

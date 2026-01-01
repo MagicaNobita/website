@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   title: {
     absolute: '',
     template: '%s - Nextra'
+  },
+  appleWebApp: {
+    title: 'Bamboo',
+    statusBarStyle: 'default',
   }
 }
 
