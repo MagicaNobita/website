@@ -7,6 +7,7 @@ interface PreloaderContextType {
     setIsLoading: Dispatch<SetStateAction<boolean>>;
 }
 
+
 export const PreloaderContext = createContext<PreloaderContextType>({
     isLoading: true,
     setIsLoading: () => { },
