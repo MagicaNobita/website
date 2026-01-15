@@ -1,38 +1,55 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { usePreloader } from "./context";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
+import CustomEase from "gsap/CustomEase";
 
-/**
- * Improved Preloader component that displays a long sentence,
- * then morphs those characters into a short title ("Bamboo"). Timings
- * are deliberately lengthened to approximate the smooth pacing of the
- * pesqueradiez.com preloader. Requires the
- * parent component to provide `isLoading` and `setIsLoading` via
- * PreloaderContext.
- */
+gsap.registerPlugin(CustomEase);
+
 export const Preloader = () => {
     const { isLoading, setIsLoading } = usePreloader();
+
+    // Fix Hydration Mismatch: Only render on client
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
     const containerRef = useRef<HTMLDivElement>(null);
+    const bgRef = useRef<HTMLDivElement>(null);
     const motionLayerRef = useRef<HTMLDivElement>(null);
-    const paragraphRef = useRef<HTMLParagraphElement>(null);
-    const titleRef = useRef<HTMLHeadingElement>(null);
-    const lineRef = useRef<HTMLDivElement>(null);
+    const fromTextRef = useRef<HTMLParagraphElement>(null);
+    const leftGroupRef = useRef<HTMLDivElement>(null);
+    const rightGroupRef = useRef<HTMLDivElement>(null);
+    const targetLeftRef = useRef<HTMLHeadingElement>(null);
+    const targetRightRef = useRef<HTMLHeadingElement>(null);
+    const wipeRef = useRef<HTMLDivElement>(null);
 
     useGSAP(() => {
-        if (!isLoading) return;
+        // Must wait for mount and ref
+        if (!isMounted || !containerRef.current || !isLoading) return;
 
-        const paragraph = paragraphRef.current;
-        const title = titleRef.current;
-        const line = lineRef.current;
+        const container = containerRef.current;
+        const bg = bgRef.current;
         const motionLayer = motionLayerRef.current;
-        if (!paragraph || !title || !line || !motionLayer) return;
+        const fromText = fromTextRef.current;
+        const leftGroup = leftGroupRef.current;
+        const rightGroup = rightGroupRef.current;
+        const targetLeft = targetLeftRef.current;
+        const targetRight = targetRightRef.current;
+        const wipe = wipeRef.current;
+
+        if (!bg || !motionLayer || !fromText || !leftGroup || !rightGroup || !targetLeft || !targetRight || !wipe) return;
 
         // Prevent scrolling while the preloader is active
         const originalOverflow = document.documentElement.style.overflow;
         document.documentElement.style.overflow = "hidden";
+
+        if (!CustomEase.get("hop")) {
+            CustomEase.create("hop", "M0,0 C0.12,0 0.18,0.04 0.22,0.12 0.28,0.26 0.22,0.44 0.34,0.56 0.52,0.74 0.72,1 1,1");
+        }
 
         const tl = gsap.timeline({
             onComplete: () => {
@@ -41,7 +58,6 @@ export const Preloader = () => {
             },
         });
 
-        // Helper: break a string into span elements for individual character animation.
         const splitToSpans = (el: HTMLElement, text: string, cls = "pm-char") => {
             el.innerHTML = "";
             const spans: HTMLSpanElement[] = [];
@@ -61,7 +77,6 @@ export const Preloader = () => {
             return spans;
         };
 
-        // Helper: map characters from the paragraph to the title.
         const mapLetters = (
             fromSpans: HTMLSpanElement[],
             toSpans: HTMLSpanElement[],
@@ -90,7 +105,6 @@ export const Preloader = () => {
                     picked.push(found);
                     mapping.set(found, target);
                 } else {
-                    // if the character is missing, clone from the target
                     const fresh = target.cloneNode(true) as HTMLSpanElement;
                     fresh.style.opacity = "0";
                     fresh.style.position = "absolute";
@@ -110,105 +124,113 @@ export const Preloader = () => {
             return { picked, mapping, unused };
         };
 
-        // Build spans up front so the timeline can control them deterministically.
-        const paragraphText = paragraph.textContent || "";
-        const paragraphSpans = splitToSpans(paragraph, paragraphText, "pm-char pm-from");
-        gsap.set(paragraphSpans, {
-            display: "inline-block",
-            willChange: "transform,opacity",
-            transform: "translateZ(0)",
+        const fromTextValue = fromText.textContent || "Build a modular base for blockchain on EVM.";
+        const targetLeftValue = targetLeft.textContent || "Bamboo";
+        const targetRightValue = targetRight.textContent || "EVM";
+
+        const fromSpans = splitToSpans(fromText, fromTextValue, "pm-char pm-from");
+        const targetLeftSpans = splitToSpans(targetLeft, targetLeftValue, "pm-char pm-target");
+        const targetRightSpans = splitToSpans(targetRight, targetRightValue, "pm-char pm-target");
+        const targetSpans = [...targetLeftSpans, ...targetRightSpans];
+
+        gsap.set(container, { clipPath: "inset(0% 0% 0% 0%)" });
+        gsap.set(bg, { autoAlpha: 1 });
+        gsap.set([fromSpans, targetSpans], { display: "inline-block", willChange: "transform,opacity", transform: "translateZ(0)" });
+        gsap.set([leftGroup, rightGroup], { autoAlpha: 1 });
+        gsap.set(targetSpans, { autoAlpha: 0 });
+        gsap.set(fromSpans, { autoAlpha: 0, scale: 0.98, y: 18, transformOrigin: "50% 50%" });
+        gsap.set(leftGroup, { x: -320, scale: 1 });
+        gsap.set(rightGroup, { x: 320, scale: 1 });
+        gsap.set(wipe, { scaleX: 0, transformOrigin: "left center", autoAlpha: 0 });
+
+        tl.to(bg, {
+            autoAlpha: 0,
+            duration: 0.8,
+            ease: "power2.out",
         });
 
-        const titleText = title.textContent || "Bamboo";
-        const titleSpans = splitToSpans(title, titleText, "pm-char pm-target");
-        titleSpans.forEach((span) => {
-            if ((span.dataset.char || "") === "b") {
-                span.classList.add("pm-big");
-            }
-        });
-        gsap.set(titleSpans, {
-            display: "inline-block",
-            willChange: "transform,opacity",
-            transform: "translateZ(0)",
+        const midIndex = Math.floor(fromSpans.length / 2);
+        fromSpans.forEach((span, index) => {
+            const dir = index < midIndex ? -1 : 1;
+            gsap.set(span, { x: dir * 220 });
         });
 
-        // Initial states: hide everything (but don't use display:none to allow measurement)
-        gsap.set(paragraph, { autoAlpha: 0, y: 18 });
-        gsap.set(title, { autoAlpha: 0, scale: 0.985 });
-        gsap.set(line, { autoAlpha: 0, scaleX: 0, scaleY: 1 });
+        tl.to(fromSpans, {
+            autoAlpha: 1,
+            scale: 1,
+            x: 0,
+            y: 0,
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: { each: 0.015, from: "edges" },
+        }, "-=0.2");
 
-        // Step 1: long sentence appears immediately (no entrance animation)
-        tl.set(paragraph, { autoAlpha: 1, y: 0 });
-        tl.set(paragraphSpans, { autoAlpha: 1, x: 0, y: 0, scale: 1 });
+        tl.to(fromText, {
+            scaleX: 0.92,
+            scaleY: 0.98,
+            letterSpacing: "-0.03em",
+            duration: 0.6,
+            ease: "power3.out",
+        }, "+=0.1");
 
-        // Pause 1s to read the sentence
-        tl.to({}, { duration: 1.0 });
+        tl.to(fromText, {
+            scaleX: 0.98,
+            scaleY: 0.99,
+            letterSpacing: "-0.01em",
+            duration: 0.5,
+            ease: "power2.out",
+        });
 
-        // Step 2: morph the long sentence into the title (1.0 s)
-        tl.addLabel("flip");
+        tl.addLabel("morph");
         tl.add(() => {
             const motionRect = motionLayer.getBoundingClientRect();
-            const titleRect = title.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            const centerX = containerRect.left + containerRect.width / 2;
+            const centerY = containerRect.top + containerRect.height / 2;
 
-            gsap.set(title, { autoAlpha: 1 });
-            gsap.set(titleSpans, { autoAlpha: 0 });
+            const { picked, unused, mapping } = mapLetters(fromSpans, targetSpans, fromText);
 
-            const fromSpans = Array.from(
-                paragraph.querySelectorAll("span.pm-char")
-            ) as HTMLSpanElement[];
-            const { picked, mapping, unused } = mapLetters(fromSpans, titleSpans, paragraph);
-            const paragraphRect = paragraph.getBoundingClientRect();
-            const forIndex = paragraphText.toLowerCase().indexOf("for");
-            const forSpan = forIndex >= 0 ? paragraphSpans[forIndex] : null;
-            const forRect = forSpan?.getBoundingClientRect();
-            const centerX = forRect ? forRect.left + forRect.width / 2 : titleRect.left + titleRect.width / 2;
-            const centerY = forRect ? forRect.top + forRect.height / 2 : titleRect.top + titleRect.height / 2;
-
-            // Fade out letters not used in "Bamboo".
-            gsap.to(unused, {
-                autoAlpha: 0,
-                duration: 0.35,
-                ease: "power2.out",
-            });
+            gsap.to(unused, { autoAlpha: 0, duration: 0.25, ease: "power2.in" });
 
             const movers: HTMLSpanElement[] = [];
-            const duration = 1.3;
-            const squeezeDuration = 0.45;
+            const duration = 1.1;
+            const squeezeDuration = 0.3;
 
-            gsap.set(paragraph, { transformOrigin: "50% 50%" });
-            gsap.to(paragraph, {
-                scaleX: 0.58,
-                scaleY: 0.92,
-                letterSpacing: "-0.08em",
-                duration: squeezeDuration,
-                ease: "power4.inOut",
-            });
-            gsap.to(paragraph, {
+            gsap.set(fromText, { transformOrigin: "50% 50%" });
+            gsap.to(fromText, {
                 scaleX: 0.85,
+                scaleY: 0.93,
+                letterSpacing: "-0.05em",
+                duration: squeezeDuration,
+                ease: "power4.in",
+            });
+            gsap.to(fromText, {
+                scaleX: 0.98,
                 scaleY: 0.98,
-                letterSpacing: "-0.02em",
+                letterSpacing: "-0.01em",
                 duration: duration - squeezeDuration,
-                ease: "expo.out",
+                ease: "power3.out",
                 delay: squeezeDuration,
             });
 
             for (const span of picked) {
                 const target = mapping.get(span)!;
-                const targetRect = target.getBoundingClientRect();
-                const sourceRect = span.getBoundingClientRect();
+                const targetBox = target.getBoundingClientRect();
+                const sourceBox = span.getBoundingClientRect();
 
-                let fromLeft = sourceRect.left;
-                let fromTop = sourceRect.top;
-                let fromWidth = sourceRect.width;
-                let fromHeight = sourceRect.height;
+                let fromLeft = sourceBox.left;
+                let fromTop = sourceBox.top;
+                let fromWidth = sourceBox.width;
+                let fromHeight = sourceBox.height;
 
                 const mover = target.cloneNode(true) as HTMLSpanElement;
                 mover.classList.add("pm-morph");
                 if (span.classList.contains("pm-fresh")) {
-                    fromLeft = paragraphRect.left + paragraphRect.width / 2;
-                    fromTop = paragraphRect.top + paragraphRect.height / 2;
-                    fromWidth = Math.max(1, targetRect.width * 0.5);
-                    fromHeight = Math.max(1, targetRect.height * 0.5);
+                    const fromRect = fromText.getBoundingClientRect();
+                    fromLeft = fromRect.left + fromRect.width / 2;
+                    fromTop = fromRect.top + fromRect.height / 2;
+                    fromWidth = Math.max(1, targetBox.width * 0.5);
+                    fromHeight = Math.max(1, targetBox.height * 0.5);
                 }
                 motionLayer.appendChild(mover);
 
@@ -222,29 +244,25 @@ export const Preloader = () => {
 
                 movers.push(mover);
 
-                const finalDx = targetRect.left - fromLeft;
-                const finalDy = targetRect.top - fromTop;
-                const isBig = mover.classList.contains("pm-big");
-                const startScale = isBig ? 0.6 : 1;
-
-                gsap.set(mover, { scale: startScale, autoAlpha: 1 });
+                const finalDx = targetBox.left - fromLeft;
+                const finalDy = targetBox.top - fromTop;
                 const toCenterX = centerX - (fromLeft + fromWidth / 2);
                 const toCenterY = centerY - (fromTop + fromHeight / 2);
+
+                gsap.set(mover, { scale: 1, autoAlpha: 1 });
                 gsap.to(mover, {
                     keyframes: [
                         {
                             x: toCenterX,
                             y: toCenterY,
-                            scale: startScale,
                             duration: squeezeDuration,
-                            ease: "power2.in",
+                            ease: "power4.in",
                         },
                         {
                             x: finalDx,
                             y: finalDy,
-                            scale: 1,
                             duration: duration - squeezeDuration,
-                            ease: "expo.out",
+                            ease: "power3.out",
                         },
                     ],
                 });
@@ -252,138 +270,127 @@ export const Preloader = () => {
 
             gsap.to(picked, { autoAlpha: 0, duration: 0.2, ease: "power1.out" });
             gsap.delayedCall(duration, () => {
-                gsap.set(titleSpans, { autoAlpha: 1 });
-                gsap.set(paragraph, { autoAlpha: 0 });
+                gsap.set(targetSpans, { autoAlpha: 1 });
+                gsap.set(fromText, { autoAlpha: 0 });
                 for (const mover of movers) mover.remove();
             });
-        }, "flip");
-        tl.to({}, { duration: 1.3 }, "flip");
+        }, "morph");
 
-        // Pause 1s before curtain split
-        tl.to({}, { duration: 1.0 });
+        tl.to({}, { duration: 1.1 }, "morph");
 
-        // Step 3: draw the cut line with a pulse
-        tl.add(() => {
-            const rect = title.getBoundingClientRect();
-            line.style.top = `${rect.top + rect.height / 2}px`;
+        tl.to(leftGroup, {
+            x: -140,
+            duration: 0.24,
+            ease: "power4.inOut",
+        }, "+=0.04");
+        tl.to(rightGroup, {
+            x: 140,
+            duration: 0.24,
+            ease: "power4.inOut",
+        }, "<");
+
+        tl.to(leftGroup, {
+            x: -40,
+            scale: 0.85,
+            duration: 0.2,
+            ease: "power4.in",
         });
-        tl.to(line, {
+        tl.to(rightGroup, {
+            x: 40,
+            scale: 1.6,
+            duration: 0.2,
+            ease: "power4.in",
+        }, "<");
+
+        tl.to({}, { duration: 0.35 });
+
+        tl.to(wipe, {
             autoAlpha: 1,
             scaleX: 1,
             duration: 0.8,
-            ease: "expo.inOut",
+            ease: "power2.out",
         });
-        tl.to(
-            line,
-            {
-                scaleY: 2,
-                duration: 0.12,
-                yoyo: true,
-                repeat: 1,
-                ease: "power2.out",
-            },
-            "<"
-        );
 
-        // Step 4: split curtains and reveal content
-        tl.addLabel("split", "+=0.02");
-        tl.to(
-            title,
-            { autoAlpha: 0, duration: 0.2 },
-            "split"
-        );
-        tl.to(
-            ".curtain-top",
-            { yPercent: -100, duration: 1.2, ease: "power4.inOut" },
-            "split"
-        );
-        tl.to(
-            ".curtain-bottom",
-            { yPercent: 100, duration: 1.2, ease: "power4.inOut" },
-            "split"
-        );
-        tl.to(
-            line,
-            { autoAlpha: 0, duration: 0.3 },
-            "split+=0.1"
-        );
-        // Remove the container after the curtains finish
-        tl.set(containerRef.current, { display: "none" });
-    }, { scope: containerRef });
+        tl.to(container, {
+            clipPath: "inset(49% 0% 49% 0%)",
+            duration: 0.7,
+            ease: "power2.inOut",
+        }, "<");
 
-    if (!isLoading) return null;
+        tl.to(container, {
+            clipPath: "inset(50% 0% 50% 0%)",
+            duration: 0.45,
+            ease: "power2.inOut",
+        });
+
+        tl.to(container, {
+            autoAlpha: 0,
+            duration: 0.35,
+            ease: "power1.out",
+        });
+
+        tl.set(container, { display: "none" });
+
+    }, { scope: containerRef, dependencies: [isMounted] });
+
+
+    if (!isMounted || !isLoading) return null;
 
     return (
         <div
             ref={containerRef}
-            className="fixed inset-0 z-[99999] flex flex-col items-center justify-center pointer-events-none"
+            className="fixed inset-0 z-[99999] flex items-center justify-center pointer-events-none"
         >
-            {/* Top Curtain */}
-            <div className="curtain-top absolute top-0 left-0 w-full h-[50vh] bg-primary z-20 flex items-end justify-center overflow-hidden"></div>
+            <div className="absolute inset-0 z-10 bg-primary" />
+            <div ref={bgRef} className="absolute inset-0 z-20 bg-black" />
 
-            {/* Bottom Curtain */}
-            <div className="curtain-bottom absolute bottom-0 left-0 w-full h-[50vh] bg-primary z-20 flex items-start justify-center overflow-hidden"></div>
-
-            {/* Content Layer */}
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8 text-center text-white">
-                <div
-                    ref={motionLayerRef}
-                    className="absolute inset-0 z-40 pointer-events-none text-white text-7xl md:text-9xl font-bold font-[family-name:var(--font-space)] tracking-[-0.06em] leading-none"
-                />
-                {/* Paragraph Stage */}
-                <p
-                    ref={paragraphRef}
-                    className="max-w-2xl text-2xl md:text-4xl font-light leading-snug tracking-tight opacity-0"
-                >
-                    Build a modular base for blockchain on EVM.
-                </p>
-
-                {/* Title Stage */}
-                <h1
-                    ref={titleRef}
-                    className="absolute text-7xl md:text-9xl font-bold font-[family-name:var(--font-space)] tracking-[-0.06em] opacity-0 leading-none"
-                >
-                    Bamboo
-                </h1>
+            <div className="absolute inset-0 z-30 flex items-center justify-center">
+                <div className="relative flex items-center justify-center text-black font-[family-name:var(--font-space)] font-semibold tracking-tight">
+                    <div ref={motionLayerRef} className="absolute inset-0 pointer-events-none" />
+                    <p
+                        ref={fromTextRef}
+                        className="max-w-4xl text-center text-xl md:text-4xl leading-snug tracking-[-0.02em]"
+                    >
+                        Build a modular base for blockchain on EVM.
+                    </p>
+                    <div
+                        ref={leftGroupRef}
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-8xl font-bold tracking-tight"
+                    >
+                        <h1 ref={targetLeftRef}>Bamboo</h1>
+                    </div>
+                    <div
+                        ref={rightGroupRef}
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-8xl font-bold tracking-tight"
+                    >
+                        <h1 ref={targetRightRef}>EVM</h1>
+                    </div>
+                </div>
             </div>
 
-            {/* Cut Line */}
             <div
-                ref={lineRef}
-                className="absolute top-[50%] left-0 w-full h-[2px] bg-white z-40 origin-left -translate-y-1/2 scale-x-0 opacity-0"
+                ref={wipeRef}
+                className="absolute left-0 right-0 top-1/2 z-40 h-[6px] -translate-y-1/2 bg-black"
             />
 
-            {/* Character styling for morph animation */}
             <style jsx>{`
-        .pm-char {
-          display: inline-block;
-          will-change: transform, opacity;
-          transform: translateZ(0);
-          -webkit-font-smoothing: antialiased;
-          text-rendering: geometricPrecision;
-        }
-        .pm-from {
-          letter-spacing: -0.02em;
-        }
-        .pm-target {
-          letter-spacing: -0.04em;
-          vertical-align: middle;
-          line-height: 1;
-        }
-        .pm-big {
-          font-size: 2em;
-          line-height: 0.9;
-        }
-        .pm-char[data-space="1"] {
-          width: 0.35em;
-        }
-        .pm-morph {
-          position: absolute;
-          will-change: transform, opacity;
-          transform: translateZ(0);
-          pointer-events: none;
-        }
-      `}</style>
+                .pm-char {
+                    display: inline-block;
+                    will-change: transform, opacity;
+                    transform: translateZ(0);
+                    -webkit-font-smoothing: antialiased;
+                    text-rendering: geometricPrecision;
+                }
+                .pm-char[data-space="1"] {
+                    width: 0.35em;
+                }
+                .pm-morph {
+                    position: absolute;
+                    will-change: transform, opacity;
+                    transform: translateZ(0);
+                    pointer-events: none;
+                }
+            `}</style>
         </div>
     );
 };

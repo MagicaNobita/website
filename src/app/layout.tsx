@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
 import { Head } from 'nextra/components'
-import { getPageMap } from 'nextra/page-map'
 import type { FC, ReactNode } from 'react'
-import { NextraTheme } from '@/components/nextra-theme'
 import './globals.css'
+import 'nextra-theme-docs/style.css'
 import { Space_Grotesk, Manrope } from 'next/font/google'
 import { SmoothScroll } from '@/components/smooth-scroll'
 import { GlobalSpotlight } from '@/components/ui/global-spotlight'
@@ -24,7 +23,6 @@ const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope' })
 
 const RootLayout: FC<{ children: ReactNode }> = async ({ children }) => {
-  const pageMap = await getPageMap()
   return (
     <html lang="en" dir="ltr" className={`${spaceGrotesk.variable} ${manrope.variable}`}>
       <Head faviconGlyph="✦" />
@@ -35,7 +33,7 @@ const RootLayout: FC<{ children: ReactNode }> = async ({ children }) => {
         <SmoothScroll />
         <GlobalSpotlight />
         <LayoutWrapper>
-          <NextraTheme pageMap={pageMap}>{children}</NextraTheme>
+          {children}
         </LayoutWrapper>
       </body>
     </html>

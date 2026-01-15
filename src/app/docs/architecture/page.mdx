@@ -1,40 +1,50 @@
 # Architecture
 
-Bamboo is designed as a lightweight, embedded indexer that runs alongside your application logic.
+Bamboo is a lightweight, embedded indexer that runs inside your Spring Boot process. It relies on JDBC for persistence and Web3j for JSON-RPC access.
 
 ## High-Level Design
 
 ```mermaid
 graph TD
-    A[Spring Boot App] -->|Includes| B(Bamboo Starter)
-    B -->|Task Scheduler| C{Indexer Engine}
-    C -->|JSON-RPC| D[Blockchain Node]
-    C -->|Read/Write| E[(MySQL Checkpoints)]
-    C -->|Publish| F[Spring Event Bus]
-    F -->|Consume| G[Your Business Logic]
+    A[Spring Boot App] -->|Auto-config| B(Bamboo Starter)
+    B -->|Schedule| C{Indexer Engine}
+    C -->|Run| D[Indexer Task]
+    D -->|JSON-RPC| E[Blockchain Node]
+    D -->|JDBC| F[(bamboo_event_log)]
+    D -->|JDBC| G[(bamboo_check_point)]
+    D -->|Publish| H[Message Dispatcher]
+    H -->|Consume| I[Message Subscribers]
 ```
 
-## Core Components
+## Core Flow
 
-### Indexer Task
-A single-threaded scheduled task (`IndexerTask`) that runs periodically.
-1.  **Reads Checkpoint**: Fetches the last scanned block from the database.
-2.  **Fetches Logs**: Calls `eth_getLogs` via Web3j to get events for the configured contracts within the block range (`step-blocks`).
-3.  **Persists Data**: Saves raw event logs to the database using JDBC.
-4.  **Updates Checkpoint**: Moves the checkpoint forward in a transaction.
-5.  **Publishes Events**: Dispatches processed events to the Spring ApplicationEventPublisher.
+1. **Read checkpoint**: `IndexerTask` loads the latest block height for the configured chain ID.
+2. **Compute range**: `fromBlock` to `fromBlock + stepBlocks` (clamped to the latest chain height).
+3. **Fetch logs**: `RpcManager` uses Web3j `eth_getLogs` with configured contract addresses.
+4. **Filter logs**: `EventLogFilter` matches logs against configured `signature-hash` values.
+5. **Persist**: `JdbcEventLogDao` writes logs and `JdbcCheckPointDao` updates checkpoint in a single transaction.
+6. **Dispatch**: `MessageDispatcher` publishes each stored `EventLog` to subscribers.
 
-### Checkpoint Mechanism
-Stores the last processed block height for a specific Chain ID. 
-- **Table**: `bamboo_checkpoint`
-- **Columns**: `chain_id`, `block_height`
+## Transaction Boundary
 
-### Schema Management
-If `bamboo.auto-initialize-schema` is enabled, Bamboo inspects your `contract-event-definitions` and generates SQL DDL to create tables compatible with the event structure.
+Log persistence and checkpoint updates are executed in a single JDBC transaction:
 
-## Deployment Mode
-Bamboo is **stateful** (due to DB checkpoints) but **stateless** in execution run-time.
-However, currently, it is recommended to run **only one instance** of the indexer per Chain ID to avoid duplicate scanning or race conditions on the checkpoint.
+- `JdbcEventLogDao.writeAll(...)` inserts logs.
+- `JdbcCheckPointDao.modify(...)` updates the checkpoint.
+
+This ensures the checkpoint does not advance if log persistence fails.
+
+## Persistence Model
+
+- **Checkpoints**: `bamboo_check_point` stores `chain_id`, `block_height`, timestamps.
+- **Event Logs**: `bamboo_event_log` stores raw log data plus the `removed` flag.
+- **Schema Initialization**: `DefaultSchemaInitializer` executes SQL from bundled schema files (MySQL/PostgreSQL).
+
+## Deployment Notes
+
+- **Single instance per chain ID**: There is no distributed lock or sharding built in.
+- **Reorg handling**: Logs include the `removed` flag, but reorg reconciliation is not automated.
+- **Retry policy**: RPC calls include basic retry with fixed delay.
 
 > [!WARNING]
-> The current version does not use distributed locks. Do not scale the indexer instance horizontally for the same chain configuration.
+> Run only one indexer instance per chain ID to avoid checkpoint races and duplicate writes.

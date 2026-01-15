@@ -1,28 +1,45 @@
 # Components
 
-The platform provides pre-built UI components for internal tools.
+This section describes the core runtime pieces of Bamboo and where you can extend behavior.
 
-## Globe
+## Indexer Engine
 
-Visualize traffic sources in real-time.
+`DefaultIndexerEngine` schedules a single-threaded task loop and manages start/stop behavior.
 
-```tsx
-import { Globe } from '@adaline/ui';
+## Indexer Task
 
-<Globe 
-  data={trafficData} 
-  theme="dark" 
-/>
-```
+`IndexerTask` performs the end-to-end scan:
+checkpoint read, log fetch, filter, persistence, and dispatch.
 
-## Terminal
+## RpcManager
 
-Display agent logs with syntax highlighting.
+`RpcManager` abstracts blockchain access. The default implementation wraps Web3j and retries RPC calls.
 
-```tsx
-import { Terminal } from '@adaline/ui';
+## EventLogFilter
 
-<Terminal 
-  lines={['Initializing...', 'Done.']} 
-/>
-```
+`EventLogFilter` decides which logs to keep. The default filter matches contract address and `signature-hash`.
+
+## MessageDispatcher
+
+`MessageDispatcher` publishes stored logs. The default is an in-memory dispatcher built on `SubmissionPublisher`.
+
+## MessageSubscriber
+
+Implement `MessageSubscriber` (or extend `AbstractMessageSubscriber`) to consume `EventLog` messages.
+
+## Extending Bamboo
+
+- **Custom dispatcher**: Implement `MessageDispatcher` to push logs to Kafka, Redis Streams, or another system.
+- **Custom filter**: Implement `EventLogFilter` to add contract-specific filtering rules.
+- **Custom RPC**: Implement `RpcManager` if you need rate limiting, caching, or multi-node routing.
+
+## Persistence Layer
+
+- `TransactionManager` manages JDBC transactions and connection reuse.
+- `CheckPointDao` and `EventLogDao` provide CRUD for `bamboo_check_point` and `bamboo_event_log`.
+- `SqlAdapter` supplies database-specific SQL for MySQL/PostgreSQL.
+
+## Initializers
+
+- `DefaultSchemaInitializer` loads schema SQL from classpath.
+- `DefaultCheckPointInitializer` creates a checkpoint at the latest block if missing.

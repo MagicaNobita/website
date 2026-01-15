@@ -1,12 +1,13 @@
 # Getting Started
 
-Bamboo is an EVM-compatible blockchain indexer provided as a Spring Boot Starter. It simplifies the process of scanning blocks and syncing contract events into your database.
+Bamboo is an EVM-compatible blockchain indexer packaged as a Spring Boot Starter. It scans blocks on a schedule, stores event logs in your database, and publishes them to in-process subscribers.
 
 ## Prerequisites
 
 - Java 21+
 - Spring Boot 3.x
-- MySQL Database
+- MySQL or PostgreSQL
+- JSON-RPC endpoint for the target chain
 
 ## Installation
 
@@ -22,37 +23,76 @@ Add the dependency to your `pom.xml`:
 
 ## Quick Start
 
-1. **Configure Database**: Ensure your Spring application is connected to a MySQL database.
-2. **Add Properties**: Configure the blockchain node and events in `application.yml`.
+1. **Configure a datasource**: Bamboo uses your Spring Boot `DataSource` for checkpoints and event logs.
+2. **Add Bamboo properties** in `application.yml`:
 
 ```yaml
 bamboo:
+  auto-initialize-schema: true
+  auto-initialize-check-point: true
+  auto-start-engine: true
+  schedule-initial-seconds: 5
+  schedule-delay-seconds: 2
+  step-blocks: 1000
   blockchain:
-    id: 1 # Mainnet
+    id: 1
     rpc-node-url: https://eth-mainnet.g.alchemy.com/v2/YOUR-API-KEY
   event-listener:
     contract-event-definitions:
-      # Address Key
-      "0xdac17f958d2ee523a2206206994597c13d831ec7": 
+      "0xdac17f958d2ee523a2206206994597c13d831ec7":
         - signature: "Transfer(address,address,uint256)"
+          signature-hash: "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+          description: "ERC20 transfer"
 ```
 
-3. **Run Application**: Start your Spring Boot app. Bamboo will:
-    - Automatically create tables for the defined events.
-    - Start scanning from the latest block (or configured checkpoint).
-    - Publish events to the Spring Event Bus.
+3. **Run your Spring Boot app**. Bamboo will:
+    - Initialize schema and checkpoint (if enabled).
+    - Scan blocks in `step-blocks` ranges.
+    - Store raw logs in `bamboo_event_log`.
+    - Dispatch logs to subscribers.
 
-## Listening to Events
+## What Gets Stored
 
-Create a listener component to handle the indexed events:
+Bamboo persists raw logs to make reprocessing and auditing possible:
+
+- `bamboo_check_point` stores the last scanned block height per chain ID.
+- `bamboo_event_log` stores log fields such as `address`, `topics`, `data`, `block_number`, and `removed`.
+
+## Checkpoint Behavior
+
+- If `auto-initialize-check-point` is enabled and no checkpoint exists, Bamboo initializes it to the latest block height.
+- Each scan updates the checkpoint to the end of the scanned range after logs are persisted.
+
+## Operational Notes
+
+- Use a single indexer instance per chain ID to avoid checkpoint conflicts.
+- Prefer an archive-capable RPC node for long-range or historical scans.
+- Increase `step-blocks` carefully to avoid RPC timeouts or payload limits.
+
+## Listening to Event Logs
+
+Bamboo publishes `EventLog` messages through an in-memory `MessageDispatcher`. Register a `MessageSubscriber` bean to consume them:
 
 ```java
 @Component
-public class MyEventListener {
+public class TransferSubscriber extends AbstractMessageSubscriber {
+    @Override
+    public boolean isSupport(Class<?> clazz) {
+        return EventLog.class.isAssignableFrom(clazz);
+    }
 
-    @EventListener
-    public void handleTransfer(ContractEvent event) {
-        System.out.println("Received event: " + event);
+    @Override
+    public void consume(Object message) {
+        EventLog eventLog = (EventLog) message;
+        System.out.println("Received: " + eventLog.getTransactionHash());
     }
 }
 ```
+
+> The `signature-hash` is required for filtering. Compute it from the event signature (Keccak-256) and keep it aligned with the on-chain ABI.
+
+## Known Limitations
+
+- Reorg reconciliation is not automatic. The `removed` flag is stored, but no rollback logic is applied.
+- Message dispatch is in-process only (RabbitMQ dispatcher is not implemented).
+- No distributed locking or sharding is provided.

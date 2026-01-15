@@ -6,23 +6,23 @@ Full reference for `application.yml` properties under the `bamboo` prefix.
 
 | Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `bamboo.auto-start-engine` | `Boolean` | `true` | Whether to automatically start the indexing engine on startup. |
-| `bamboo.auto-initialize-schema` | `Boolean` | `false` | Automatically creates database tables for configured events if they don't exist. |
-| `bamboo.auto-initialize-check-point` | `Boolean` | `false` | Automatically initializes the checkpoint to the current block height if missing. |
-| `bamboo.schedule-initial-seconds` | `Integer` | `5` | Initial delay in seconds before the first scan task runs. |
-| `bamboo.schedule-delay-seconds` | `Integer` | `2` | Interval in seconds between scan tasks. |
-| `bamboo.step-blocks` | `Integer` | `1000` | Number of blocks to scan in a single task execution. |
+| `bamboo.auto-start-engine` | `Boolean` | `true` | Start the indexer automatically on application startup. |
+| `bamboo.auto-initialize-schema` | `Boolean` | `false` | Run bundled schema SQL for MySQL/PostgreSQL. |
+| `bamboo.auto-initialize-check-point` | `Boolean` | `false` | Create an initial checkpoint at the latest block if missing. |
+| `bamboo.schedule-initial-seconds` | `Integer` | `5` | Delay before the first scan executes. |
+| `bamboo.schedule-delay-seconds` | `Integer` | `2` | Interval between scan runs. |
+| `bamboo.step-blocks` | `Integer` | `1000` | Block range per scan run. |
 
 ## Blockchain Configuration
 
 | Property | Type | Description |
 | :--- | :--- | :--- |
-| `bamboo.blockchain.id` | `BigInteger` | Chain ID (e.g., 1 for Ethereum Mainnet, 137 for Polygon). Used for check-pointing. |
-| `bamboo.blockchain.rpc-node-url` | `String` | The HTTP JSON-RPC URL of the blockchain node. |
+| `bamboo.blockchain.id` | `BigInteger` | Chain ID used as the checkpoint key. |
+| `bamboo.blockchain.rpc-node-url` | `String` | HTTP JSON-RPC endpoint. |
 
-## Event Initializer Configuration
+## Event Listener Configuration
 
-Define specific contracts and events to index.
+Define the contracts and event signatures to index. The filter uses `signature-hash` to match logs.
 
 ```yaml
 bamboo:
@@ -30,16 +30,47 @@ bamboo:
     contract-event-definitions:
       "<CONTRACT_ADDRESS>":
         - signature: "<EVENT_SIGNATURE>"
-          # Optional: signature-hash overrides if needed
+          signature-hash: "<EVENT_SIGNATURE_HASH>"
+          description: "Optional label"
 ```
 
 **Example:**
 
 ```yaml
 bamboo:
-  blockchain:
-    id: 56 # BSC
-    rpc-node-url: https://bsc-dataseed.binance.org/
   auto-initialize-schema: true
+  auto-initialize-check-point: true
   step-blocks: 2000
+  blockchain:
+    id: 56
+    rpc-node-url: https://bsc-dataseed.binance.org/
+  event-listener:
+    contract-event-definitions:
+      "0x0000000000000000000000000000000000000000":
+        - signature: "Transfer(address,address,uint256)"
+          signature-hash: "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 ```
+
+> If `signature-hash` is missing or mismatched, logs will be filtered out and never stored.
+
+## Datasource Requirements
+
+Bamboo relies on Spring Boot's `DataSource`. Ensure:
+
+- Your database user can create tables if `auto-initialize-schema` is enabled.
+- The connection pool is sized to handle periodic scan bursts.
+
+## Logging
+
+Enable debug logs for Bamboo packages to see scan ranges and filtered counts:
+
+```yaml
+logging:
+  level:
+    dev.lastrealm.bamboo: debug
+```
+
+## RPC Tips
+
+- Keep `step-blocks` small enough to avoid `eth_getLogs` timeouts.
+- Use a dedicated RPC provider for production workloads.

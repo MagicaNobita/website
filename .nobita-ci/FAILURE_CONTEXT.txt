@@ -1,0 +1,12 @@
+CI stage FAILED: test
+
+Please fix the issue, then exit Codex to let the wrapper re-run test.
+
+Failure log file: [nobita-ci] running tests...
+[nobita-ci] => yarn -s test
+error Command "test" not found.
+.nobita-ci/test.log
+
+Hints:
+- Keep changes minimal.
+- After fixing, ensure the failing command passes.

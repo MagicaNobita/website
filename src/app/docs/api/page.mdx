@@ -1,31 +1,86 @@
 # API Reference
 
-> [!NOTE]
-> This API is currently in Beta. Breaking changes may occur.
+Bamboo does not expose an HTTP API. It is a library with Java extension points.
 
-## Authentication
+## Core Interfaces
 
-All requests must include the `Authorization` header:
+### IndexerEngine
+Controls the lifecycle of the scheduled indexer.
 
-```http
-Authorization: Bearer <your_api_key>
-```
+- `start()` begin scheduled scanning
+- `stop()` halt scanning and shutdown executor
+- `isRunning()` check current state
 
-## Endpoints
+### RpcManager
+Abstracts blockchain JSON-RPC calls.
 
-### List Agents
-`GET /v1/agents`
+- `getChainId()`
+- `getLatestBlockHeight()`
+- `getLogs(fromBlock, toBlock, addresses)`
 
-Returns a list of all agents in your organization.
+### EventLogFilter
+Filters logs based on contract/event definitions.
 
-### Run Evaluation
-`POST /v1/evaluations`
+- `filter(contractEventDefinitionsMap, logs)`
 
-Starts a new evaluation run.
+### MessageDispatcher
+Publishes stored event logs to subscribers.
 
-```json
-{
-  "agentId": "agent_123",
-  "datasetId": "dataset_456"
-}
+- `isSupport(clazz)`
+- `addSubscriber(subscriber)`
+- `publish(message)`
+
+### MessageSubscriber
+Consumes dispatched messages.
+
+- `isSupport(clazz)`
+- `consume(message)`
+- `getInnerSubscriber()` (for Flow integration)
+
+## Default Implementations
+
+- `DefaultIndexerEngine` schedules a single-threaded loop.
+- `DefaultRpcManager` wraps Web3j and retries failed calls.
+- `DefaultEventLogFilter` matches contract address + `signature-hash`.
+- `EventLogMemoryMessageDispatcher` publishes in-process.
+
+## Model Objects
+
+### EventLog
+Represents an on-chain log with fields such as `address`, `topics`, `data`, `blockNumber`, `transactionHash`, and `removed`.
+
+### EventDefinition
+Defines an event signature and its `signature-hash` used for filtering.
+
+## Initializers
+
+- `DefaultSchemaInitializer` executes database schema SQL.
+- `DefaultCheckPointInitializer` creates a checkpoint at the latest block when missing.
+
+## Manual Wiring Example
+
+If you are not using Spring Boot auto-configuration, you can wire the pieces directly:
+
+```java
+RpcManager rpcManager = new DefaultRpcManager(web3j);
+TransactionManager txManager = new TransactionManager(dataSource);
+SqlAdapter sqlAdapter = new MySqlAdapter();
+CheckPointDao checkPointDao = new JdbcCheckPointDao(sqlAdapter, txManager);
+EventLogDao eventLogDao = new JdbcEventLogDao(sqlAdapter, txManager);
+EventLogFilter filter = new DefaultEventLogFilter();
+MessageDispatcher dispatcher = new EventLogMemoryMessageDispatcher();
+
+IndexerTask task = new IndexerTask(
+    chainId,
+    rpcManager,
+    contractEventDefinitions,
+    checkPointDao,
+    eventLogDao,
+    txManager,
+    filter,
+    List.of(dispatcher)
+);
+
+IndexerEngine engine = new DefaultIndexerEngine(task, 5, 2);
+engine.start();
 ```

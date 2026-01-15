@@ -128,4 +128,23 @@
   .text-glow {
     text-shadow: 0 0 20px rgba(0, 200, 80, 0.3);
   }
+
+  .logo-scroll {
+    animation: logo-scroll 35s linear infinite;
+    will-change: transform;
+  }
+
+  .logo-scroll:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes logo-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
